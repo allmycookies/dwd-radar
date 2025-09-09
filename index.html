@@ -504,14 +504,15 @@
 
     <!-- Row for Image Tracker Controls -->
     <div class="row mb-3 gap-1">
-      <div class="col-12 col-md-5 d-flex">
+      <div class="col-12 col-md-4 d-flex">
         <label for="trackerBtn" class="form-label w-25">Analyse:</label>
         <button id="trackerBtn" class="btn btn-info">Bewegungsanalyse starten</button>
       </div>
-      <div class="col-12 col-md-5 d-flex align-items-center">
+      <div class="col-12 col-md-8 d-flex align-items-center">
         <div id="trackerResults" style="display: none;">
-          <strong>Analyse-Ergebnis:</strong>
-          <span id="trackerSpeed">--</span>
+          <strong class="me-2">Ergebnis:</strong>
+          <span id="trackerSpeed" class="me-3">--</span>
+          <div id="colorSelector" class="d-inline-block"></div>
         </div>
       </div>
     </div>
@@ -598,6 +599,7 @@
     // Image-Tracker Instanz und Status
     let imageTracker = null;
     let analysisEnabled = false;
+    let selectedColor = null;
 
     // DOM-Referenzen
     let mapHeightEl, applySizeBtn;
@@ -642,7 +644,52 @@
     // Direkt beim Laden initialisieren:
     updateClock();
 
-    
+    function displayColorPicker(colors) {
+      const container = document.getElementById('colorSelector');
+      container.innerHTML = ''; // Clear previous picker
+      if (!colors || colors.length === 0) {
+        selectedColor = null;
+        if(imageTracker) imageTracker.setSelectedColor(null);
+        return;
+      }
+
+      const label = document.createElement('span');
+      label.textContent = 'Track-Farbe:';
+      label.style.marginRight = '5px';
+      container.appendChild(label);
+
+      colors.forEach(color => {
+        const colorBox = document.createElement('div');
+        colorBox.style.backgroundColor = color;
+        colorBox.style.width = '20px';
+        colorBox.style.height = '20px';
+        colorBox.style.display = 'inline-block';
+        colorBox.style.cursor = 'pointer';
+        colorBox.style.border = '2px solid #fff';
+        colorBox.style.marginLeft = '3px';
+        colorBox.dataset.color = color;
+
+        colorBox.addEventListener('click', (e) => {
+          // Remove border from previously selected
+          const currentlySelected = container.querySelector('.selected-color');
+          if (currentlySelected) {
+            currentlySelected.classList.remove('selected-color');
+            currentlySelected.style.border = '2px solid #fff';
+          }
+
+          // Add border to new selection
+          selectedColor = e.target.dataset.color;
+          e.target.classList.add('selected-color');
+          e.target.style.border = '2px solid #000';
+
+          // Inform the tracker about the selection
+          if(imageTracker) imageTracker.setSelectedColor(selectedColor);
+          console.log("Selected color:", selectedColor);
+        });
+
+        container.appendChild(colorBox);
+      });
+    }
     
     /* ---------------------------------------------------------
        2) INITIALISIERUNG NACH "DOMContentLoaded"
@@ -814,7 +861,7 @@
       trackerBtn.addEventListener('click', () => {
         analysisEnabled = !analysisEnabled;
         imageTracker.setAnalysisEnabled(analysisEnabled);
-        trackerBtn.textContent = analysisEnabled ? 'Bewegungsanalyse stoppen' : 'Bewegungsanalyse starten';
+        trackerBtn.textContent = analysisEnabled ? 'Analyse stoppen' : 'Bewegungsanalyse starten';
         trackerBtn.classList.toggle('btn-info', !analysisEnabled);
         trackerBtn.classList.toggle('btn-danger', analysisEnabled);
         document.getElementById('trackerResults').style.display = analysisEnabled ? 'block' : 'none';
@@ -823,14 +870,23 @@
           const selLayer = layerSelectEl.value;
           const lyrobj = layerInfoList.find(l => l.name === selLayer);
           if (lyrobj && lyrobj.legendUrl) {
-            // The legend URL might need to go through the proxy
             const proxiedLegendUrl = "proxy.php?url=" + encodeURIComponent(lyrobj.legendUrl);
-            imageTracker.parseLegend(proxiedLegendUrl);
+            imageTracker.parseLegend(proxiedLegendUrl)
+              .then(legendData => {
+                displayColorPicker(legendData.list);
+              })
+              .catch(error => {
+                console.error("Fehler bei der Legenden-Analyse:", error);
+                alert("Die Legende konnte nicht analysiert werden. Die Analyse wird gestoppt.");
+                trackerBtn.click(); // Simulate a click to reset state
+              });
           } else {
-            console.warn("Keine Legende für den aktuellen Layer verfügbar.");
             alert("Für diesen Layer ist keine Legende verfügbar, die Analyse kann nicht gestartet werden.");
-            analysisEnabled = false; // Disable it again
+            trackerBtn.click(); // Simulate a click to reset state
           }
+        } else {
+          // When disabling, also clear the color picker
+          displayColorPicker([]);
         }
       });
 
