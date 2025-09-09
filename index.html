@@ -1358,11 +1358,11 @@
 
       // Starte die Animation als periodisches Intervall
       animTimer = setInterval(() => {
-        frameLayers[animIndex].setOpacity(0);
         animIndex = (animIndex + 1) % frameLayers.length;
-        frameLayers[animIndex].setOpacity(1);
-        updateTimeDisplay(times[animIndex]);
-        // Aktualisiere den Slider-Fortschritt
+        // setCurrentFrame() aufrufen, um die Frame-Anzeige UND die Analyse zu handhaben
+        setCurrentFrame(animIndex);
+
+        // Der Slider muss weiterhin manuell aktualisiert werden
         timeSlider.style.setProperty('--range-progress', (animIndex / timeSlider.max * 100) + '%');
         timeSlider.value = animIndex;
       }, ANIMATION_INTERVAL);
