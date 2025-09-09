@@ -70,6 +70,8 @@ class ImageTracker {
 
   /**
    * Fetches and analyzes the legend image to create a color-to-value map.
+   * This version is more robust, scanning the entire image and using frequency counts.
+   * @param {string} legendUrl - The URL of the legend image.
    */
   async parseLegend(legendUrl) {
     console.log(`Parsing legend from: ${legendUrl}`);
@@ -80,42 +82,53 @@ class ImageTracker {
     return new Promise((resolve, reject) => {
         img.onload = () => {
             const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = img.width;
-            tempCanvas.height = img.height;
+            const w = img.width, h = img.height;
+            tempCanvas.width = w;
+            tempCanvas.height = h;
             const tempCtx = tempCanvas.getContext('2d', { willReadFrequently: true });
             tempCtx.drawImage(img, 0, 0);
 
-            const colors = [];
+            const colorCounts = new Map();
             const colorPositions = new Map();
+            const imageData = tempCtx.getImageData(0, 0, w, h).data;
 
-            const startX = Math.floor(img.width * 0.25);
-            const endX = Math.floor(img.width * 0.75);
+            for (let i = 0; i < imageData.length; i += 4) {
+                const r = imageData[i], g = imageData[i+1], b = imageData[i+2], a = imageData[i+3];
 
-            for (let y = 0; y < img.height; y++) {
-                for (let x = startX; x < endX; x++) {
-                    const pixel = tempCtx.getImageData(x, y, 1, 1).data;
-                    const r = pixel[0], g = pixel[1], b = pixel[2], a = pixel[3];
-                    const isGrey = Math.abs(r - g) < 10 && Math.abs(g - b) < 10;
-                    if (a > 200 && (r + g + b < 700) && !isGrey) {
-                        const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
-                        if (!colorPositions.has(hex)) {
-                            colors.push(hex);
-                            colorPositions.set(hex, y);
-                            break;
-                        }
+                const isGrey = Math.abs(r - g) < 15 && Math.abs(g - b) < 15 && Math.abs(r - b) < 15;
+                // Filter out transparent, white/light, and grey pixels
+                if (a > 200 && (r + g + b < 720) && !isGrey) {
+                    const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+
+                    colorCounts.set(hex, (colorCounts.get(hex) || 0) + 1);
+
+                    if (!colorPositions.has(hex)) {
+                        const y = Math.floor((i / 4) / w);
+                        colorPositions.set(hex, y);
                     }
                 }
             }
 
-            colors.sort((a, b) => colorPositions.get(a) - colorPositions.get(b));
-            this.legendColorMap = new Map(colors.map((color, index) => [color, index + 1]));
+            // Filter out colors that are likely just noise
+            const MIN_PIXEL_COUNT = 2;
+            const validColors = [];
+            for (const [hex, count] of colorCounts.entries()) {
+                if (count >= MIN_PIXEL_COUNT) {
+                    validColors.push(hex);
+                }
+            }
+
+            // Sort the valid colors by their vertical position
+            validColors.sort((a, b) => colorPositions.get(a) - colorPositions.get(b));
+
+            this.legendColorMap = new Map(validColors.map((color, index) => [color, index + 1]));
 
             if (this.legendColorMap.size === 0) {
-                console.error("Could not extract any valid colors from the legend.");
+                console.error("Could not extract any valid colors from the legend after filtering.");
                 reject("No colors found in legend.");
             } else {
-                console.log("Legend parsed successfully. Color map:", this.legendColorMap);
-                resolve({ map: this.legendColorMap, list: colors });
+                console.log("Legend parsed successfully (robust method). Color map:", this.legendColorMap);
+                resolve({ map: this.legendColorMap, list: validColors });
             }
         };
         img.onerror = () => {
