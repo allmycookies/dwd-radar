@@ -45,7 +45,7 @@ The `proxy.php` script is required to bypass browser CORS (Cross-Origin Resource
 
 ### `index_noProxy.html`
 
-This repository also includes `index_noProxy.html`, a version that attempts to connect to the DWD server directly without a proxy. This file is intended for local use or specific environments where CORS is not an issue (e.g., if you use a browser extension to disable CORS). It will likely not work if opened directly from the filesystem or on a standard web server due to security restrictions in modern browsers.
+This repository also includes `index_noProxy.html`, a version that attempts to connect to the DWD server directly without a proxy. This file is intended for local use or specific environments where CORS is not an issue (e.g., if you use a browser extension to disable CORS). It will likely not work if opened directly from a standard web server due to security restrictions in modern browsers.
 
 ## Technical Details
 
