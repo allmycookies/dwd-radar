@@ -104,9 +104,14 @@
             right: 0px;
         }
         
+        #timeDisplay small {
+            letter-spacing: 0px;
+            font-size: 10px;
+            font-weight: 300;
+        }
+        
         /* Anpassungen der Zeitanzeige im Vollbildmodus */
         #timeDisplay.fullscreen {
-            padding: 3px 10px;
             height: 32px;
             font-size: 18px;
         }
@@ -115,7 +120,7 @@
         #forecastOverlay {
             display: none;
             position: absolute;
-            bottom: 45px;     /* Abstand zum unteren Kartenrand */
+            bottom: 56px;     /* Abstand zum unteren Kartenrand */
             right: 5px;       /* Positionierung rechts */
             background-color: red;
             color: white;
@@ -731,6 +736,7 @@
             console.error("Fehler beim Aktualisieren der Capabilities:", err);
             alert("Fehler beim Aktualisieren der Capabilities.");
           }
+          
         });
 
 
@@ -773,6 +779,7 @@
           alert("Bitte geben Sie eine Adresse ein.");
         }
       });
+      onStartClicked()
     });
 
     /* ---------------------------------------------------------
@@ -1259,7 +1266,7 @@
       const yy = d.getFullYear();
       const hh = String(d.getHours()).padStart(2, "0");
       const mn = String(d.getMinutes()).padStart(2, "0");
-      timeDisplay.innerHTML = `${dd}.${mm}.${yy} / ${hh}:${mn} lok.`;
+      timeDisplay.innerHTML = `${dd}.${mm}.${yy} / ${hh}:${mn} <small>lok.</small>`;
     
       // Blende das Forecast-Overlay ein, wenn der Zeitpunkt in der Zukunft liegt
       const now = new Date();
