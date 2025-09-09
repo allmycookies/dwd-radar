@@ -502,6 +502,20 @@
       </div>
     </div>
 
+    <!-- Row for Image Tracker Controls -->
+    <div class="row mb-3 gap-1">
+      <div class="col-12 col-md-5 d-flex">
+        <label for="trackerBtn" class="form-label w-25">Analyse:</label>
+        <button id="trackerBtn" class="btn btn-info">Bewegungsanalyse starten</button>
+      </div>
+      <div class="col-12 col-md-5 d-flex align-items-center">
+        <div id="trackerResults" style="display: none;">
+          <strong>Analyse-Ergebnis:</strong>
+          <span id="trackerSpeed">--</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Checkboxen für zusätzliche Optionen -->
     <div class="row ms-1">
       <div class="col-12 col-md-3 form-check">
@@ -549,6 +563,9 @@
   <!-- Bootstrap JS (CDN) -->
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+  <!-- Image Tracker Module -->
+  <script src="image-tracker.js"></script>
+
   <!-- ====================================================
        5. HAUPT-JAVASCRIPT (LOGIK & FUNKTIONEN)
        ==================================================== -->
@@ -577,6 +594,10 @@
 
     // Array mit Zeitstempeln (wird später gefüllt)
     let latestTimes = null;
+
+    // Image-Tracker Instanz und Status
+    let imageTracker = null;
+    let analysisEnabled = false;
 
     // DOM-Referenzen
     let mapHeightEl, applySizeBtn;
@@ -779,6 +800,41 @@
           alert("Bitte geben Sie eine Adresse ein.");
         }
       });
+
+      // Image-Tracker initialisieren
+      const analysisCanvas = document.getElementById('imageAnalysisCanvas');
+      imageTracker = new ImageTracker({
+        canvas: analysisCanvas,
+        map: map,
+        resultsElement: document.getElementById('trackerSpeed')
+      });
+
+      // Event-Listener für den Analyse-Button
+      const trackerBtn = document.getElementById('trackerBtn');
+      trackerBtn.addEventListener('click', () => {
+        analysisEnabled = !analysisEnabled;
+        imageTracker.setAnalysisEnabled(analysisEnabled);
+        trackerBtn.textContent = analysisEnabled ? 'Bewegungsanalyse stoppen' : 'Bewegungsanalyse starten';
+        trackerBtn.classList.toggle('btn-info', !analysisEnabled);
+        trackerBtn.classList.toggle('btn-danger', analysisEnabled);
+        document.getElementById('trackerResults').style.display = analysisEnabled ? 'block' : 'none';
+
+        if (analysisEnabled) {
+          const selLayer = layerSelectEl.value;
+          const lyrobj = layerInfoList.find(l => l.name === selLayer);
+          if (lyrobj && lyrobj.legendUrl) {
+            // The legend URL might need to go through the proxy
+            const proxiedLegendUrl = "proxy.php?url=" + encodeURIComponent(lyrobj.legendUrl);
+            imageTracker.parseLegend(proxiedLegendUrl);
+          } else {
+            console.warn("Keine Legende für den aktuellen Layer verfügbar.");
+            alert("Für diesen Layer ist keine Legende verfügbar, die Analyse kann nicht gestartet werden.");
+            analysisEnabled = false; // Disable it again
+          }
+        }
+      });
+
+
       onStartClicked()
     });
 
@@ -1337,10 +1393,29 @@
       if (!frameLayers.length) return;
       if (!latestTimes || !latestTimes.length) return;
       frameLayers.forEach(fl => fl.setOpacity(0));
-      frameLayers[idx].setOpacity(1);
+
+      const currentFrameLayer = frameLayers[idx];
+      if (!currentFrameLayer) return;
+
+      currentFrameLayer.setOpacity(1);
       updateTimeDisplay(latestTimes[idx]);
       timeSlider.value = idx;
       animIndex = idx;
+
+      // Hook für den Image-Tracker
+      if (analysisEnabled && imageTracker) {
+        const imgElement = currentFrameLayer.getContainer()?.querySelector('img');
+        if (imgElement) {
+          // Warten bis das Bild vollständig geladen und dekodiert ist
+          if (imgElement.complete && imgElement.naturalHeight !== 0) {
+            imageTracker.analyzeFrame(imgElement, latestTimes[idx]);
+          } else {
+            imgElement.onload = () => {
+              imageTracker.analyzeFrame(imgElement, latestTimes[idx]);
+            };
+          }
+        }
+      }
     }
 
     function onPauseClicked() {
@@ -1600,6 +1675,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
   </script>
+
+  <!-- Canvas für die Bild-Analyse -->
+  <canvas id="imageAnalysisCanvas" style="display:none;"></canvas>
+
   <footer class="bg-dark text-white py-3 mt-4">
   <div class="container text-center">
     <p class="mb-1">© Leaflet – Die Leaflet-Bibliothek ist urheberrechtlich geschützt.</p>
