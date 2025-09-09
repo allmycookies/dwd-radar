@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <title>DWD-WMS</title>
+    <!-- Bootstrap 5 CSS (CDN) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+
+    <style>
+        /* =============================================================================
+           1. Globale Einstellungen & Basis-Styling
+           ============================================================================= */
+        
+        /* Globaler Reset und Standardformatierung für alle Elemente */
+        * {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+        }
+        
+        /* Grundlayout für HTML- und Body-Elemente */
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+        }
+        
+        /* Begrenzung der maximalen Breite des Containers */
+        .container {
+            max-width: 850px;
+        }
+        
+        
+        /* =============================================================================
+           2. Karten-Container & Vollbild-Karte
+           ============================================================================= */
+        
+        /* Standard-Styling für die Kartenfläche */
+        #mapid {
+            position: relative;
+            border: 1px solid #aaa;
+            margin-top: 1rem;
+        }
+        
+        /* Anpassungen für die Vollbild-Anzeige der Karte */
+        #mapid.fullscreen {
+            width: 100% !important;
+            height: 100% !important;
+            position: fixed;
+            top: 0;
+            left: 0;
+            margin-top: 0rem !important;
+            z-index: 9990;
+        }
+        
+        
+        /* =============================================================================
+           3. Overlays und Zusatzanzeigen
+           ============================================================================= */
+        
+        /* Verstecktes Legenden-Overlay (optional) */
+        #legendOverlay {
+            display: none;
+        }
+        
+        /* Standard-Layout für das Legenden-Overlay, das in der Kartenfläche positioniert ist */
+        .legend-overlay {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 9999;
+            background: rgba(255, 255, 255, 0.7);
+            padding: 2px;
+            border: none;
+            font-family: sans-serif;
+            max-width: 200px;
+        }
+        
+        /* Bild innerhalb des Legenden-Overlays */
+        .legend-overlay img {
+            display: block;
+            max-width: 70px;
+        }
+        
+        /* Standard-Styling für die Zeitanzeige */
+        #timeDisplay {
+            display: none;
+            border: none;
+            background: rgb(255 255 255 / 82%);
+            position: absolute;
+            z-index: 9991;
+            bottom: 17px;
+            height: 25px;
+            letter-spacing: -0.5px;
+            padding: 2px 4px 0px 0px;
+            font-size: 16px;
+            width: 180px;
+            font-weight: 700;
+            text-align: end;
+            right: 0px;
+        }
+        
+        /* Anpassungen der Zeitanzeige im Vollbildmodus */
+        #timeDisplay.fullscreen {
+            padding: 3px 10px;
+            height: 32px;
+            font-size: 18px;
+        }
+        
+        /* Forecast-Overlay: Anzeige von Vorhersage-Informationen (zunächst versteckt) */
+        #forecastOverlay {
+            display: none;
+            position: absolute;
+            bottom: 45px;     /* Abstand zum unteren Kartenrand */
+            right: 5px;       /* Positionierung rechts */
+            background-color: red;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            z-index: 10000;
+        }
+        
+        
+        /* =============================================================================
+           4. Ladeanzeigen und zusätzliche Container
+           ============================================================================= */
+        
+        /* Container für Ladeanzeige (oben rechts) */
+        div#loadingContainer {
+            position: absolute;
+            top: 10px;
+            z-index: 9991;
+            right: 10px;
+            width: 170px;
+            padding: 5px 10px;
+        }
+        
+        /* Allgemeine Einstellungen für versteckte Informationscontainer */
+        #loadingContainer {
+            display: none;
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+            margin-bottom: 1rem;
+        }
+        #infocontainer {
+            display: block;
+            border: 1px solid #ccc;
+            background: #f9f9f9;
+            margin-bottom: 1rem;
+        }
+        #layerInfo {
+            display: none;
+            padding: 0px 10px;
+            background: #f9f9f9;
+        }
+        #connectionInfo{
+            display: block;
+            padding: 0px 10px;
+            background: #f9f9f9;
+        }
+        
+        /* NEU: Overlay, das während des Ladens der Capabilities angezeigt wird */
+        #loadingOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 9998;
+            pointer-events: none; /* Blockiert keine Benutzerinteraktionen */
+            background: repeating-linear-gradient(
+                -45deg,
+                rgba(0, 0, 0, 0.1),
+                rgba(0, 0, 0, 0.1) 10px,
+                rgba(0, 0, 0, 0.2) 10px,
+                rgba(0, 0, 0, 0.2) 20px
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        /* Styling für den Text, der während des Ladens angezeigt wird */
+        #loadingOverlay .loading-text {
+            font-size: 20px;
+            color: #fff;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 10px 20px;
+            border-radius: 5px;
+        }
+        
+        
+        /* =============================================================================
+           5. Steuerelemente: Buttons, Formulare & Progress Bar
+           ============================================================================= */
+        
+        /* Button für Größenanpassung */
+        button#applySizeBtn {
+            height: 25px;
+            line-height: 0px;
+            margin-top: 0px;
+        }
+        
+        /* Button für Geocoding */
+        button#geocodeBtn {
+            height: 25px;
+            line-height: 0px;
+            margin-top: 0px;
+        }
+        
+        /* Buttons zum Fortsetzen und Pausieren (jeweils 50% Breite) */
+        button#resumeBtn {
+            width: 50%;
+        }
+        
+        button#pauseBtn {
+            width: 50%;
+        }
+        
+        /* Styling für Formular-Beschriftungen */
+        .form-label {
+            line-height: 30px;
+            height: 20px;
+        }
+        
+        /* Anpassungen für den Zeitslider */
+        input#timeSlider {
+            width: calc(100% - 165px);
+            padding-right: 10px;
+        }
+        
+        /* Fortschrittsanzeige */
+        #progressBar {
+            width: 100%;
+            height: 20px;
+        }
+        
+        
+        /* =============================================================================
+           6. Range-Slider Styling
+           ============================================================================= */
+        
+        /* Basis-Styling für den Range-Slider */
+        input[type=range] {
+            -webkit-appearance: none;  /* Entfernt die browserabhängige Standard-Gestaltung */
+            width: 100%;
+            background: transparent;
+        }
+        
+        /* Schiene (Track) für WebKit-Browser */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: linear-gradient(to right, #337ab7 0%, #337ab7 var(--range-progress, 50%), #ddd var(--range-progress, 50%), #ddd 100%);
+            border-radius: 5px;
+            border: 1px solid #aaa;
+        }
+        
+        /* Daumen (Thumb) für WebKit-Browser */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            border: 1px solid #777;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            margin-top: -6px;  /* Zentriert den Daumen auf der Schiene */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Track-Styling für Firefox */
+        input[type=range]::-moz-range-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #ddd;
+            border-radius: 5px;
+            border: 1px solid #aaa;
+        }
+        
+        /* Thumb-Styling für Firefox */
+        input[type=range]::-moz-range-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #777;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Anpassungen für IE: Track */
+        input[type=range]::-ms-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: transparent;
+            border-color: transparent;
+            color: transparent;
+        }
+        
+        /* Anpassungen für IE: Thumb */
+        input[type=range]::-ms-thumb {
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #fff;
+            border: 1px solid #777;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Optional: Hover-Effekt für den Slider-Daumen */
+        input[type=range]:hover::-webkit-slider-thumb,
+        input[type=range]:hover::-moz-range-thumb,
+        input[type=range]:hover::-ms-thumb {
+            background: #f0f0f0;
+        }
+        
+        
+        /* =============================================================================
+           7. Fadenkreuz (Crosshair) Styling
+           ============================================================================= */
+        
+        /* Positionierung und Größe des Fadenkreuzes */
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            pointer-events: none;  /* Verhindert, dass das Fadenkreuz Interaktionen blockiert */
+            margin-left: -10px;    /* Zentrierung: halbe Breite */
+            margin-top: -10px;     /* Zentrierung: halbe Höhe */
+            z-index: 9994;
+            box-shadow: 0px 0px 0px 2px;
+        }
+        
+        /* Pseudo-Elemente für vertikale und horizontale Linien im Fadenkreuz */
+        #crosshair:before,
+        #crosshair:after {
+            content: "";
+            position: absolute;
+            background: red;
+        }
+        
+        /* Vertikale Linie */
+        #crosshair:before {
+            left: 50%;
+            top: 0;
+            width: 1px;
+            height: 100%;
+            margin-left: -0.5px;  /* Zentriert die Linie */
+        }
+        
+        /* Horizontale Linie */
+        #crosshair:after {
+            top: 50%;
+            left: 0;
+            width: 100%;
+            height: 1px;
+            margin-top: -0.5px;   /* Zentriert die Linie */
+        }
+        
+        
+        /* =============================================================================
+           8. Weitere Elemente (Attribution, Icons etc.)
+           ============================================================================= */
+        
+        /* Spezielles Styling für die Leaflet-Attribution */
+        .leaflet-control-attribution.leaflet-control {
+            width: 180px;
+            text-align: right;
+        }
+        
+        /* Icon-Styling, z.B. für Bootstrap Icons */
+        i.bi {
+            font-size: 16px;
+        }
+        
+        
+        /* =============================================================================
+           9. Media Query für Smartphones (kleine Bildschirme)
+           ============================================================================= */
+        
+        /* Anpassungen für Bildschirme bis zu 767.98px Breite */
+        @media (max-width: 767.98px) {
+            #mapid {
+                height: 87vh !important;
+                margin-top: 0 !important;
+                width: 100vw !important;
+                translate: -9px;
+            }
+        }
+
+    </style>
+  </head>
+
+<body class="bg-light">
+
+  <!-- ====================================================
+       1. MAP CONTAINER & OVERLAYS
+       ==================================================== -->
+  <!-- Karte in einem Container -->
+  <div class="container">
+    <div class="row">
+      <div class="col-12">
+        <!-- Leaflet-Karte -->
+        <div id="mapid">
+          <!-- Legenden-Overlay (links oben oder links unten, je nach Bedarf) -->
+          <div id="legendOverlay" class="legend-overlay"></div>
+          <!-- Zeit-Anzeige (optional, oben rechts) -->
+          <div id="timeDisplay"></div>
+          <!-- Ladefortschritt (oben rechts) -->
+          <div id="loadingContainer">
+            <div id="loadingInfo">Lade ...</div>
+            <progress id="progressBar" value="0" max="100"></progress>
+          </div>
+          <!-- Fadenkreuz in der Mitte -->
+          <div id="crosshair"></div>
+          <!-- Forecast-Overlay (unteres Zentrum, wenn es sich um Prognose handelt) -->
+          <div id="forecastOverlay"></div>
+          <!-- Overlay während des Ladens der Capabilities -->
+          <div id="loadingOverlay">
+            <div class="loading-text">Bitte warten, lade die Capabilities...</div>
+          </div>
+        </div><!-- Ende #mapid -->
+      </div>
+
+      <!-- Zeit-Slider Overlay (unten in der Mitte) mit Pause/Resume -->
+      <div id="timeSliderOverlay" class="col-12 d-flex my-1">
+        <input type="range" id="timeSlider" class="form-range h-100" min="0" max="0" step="1" value="0"/>
+        <div class="d-flex w-auto" style="overflow: hidden;">
+          <button id="startBtn" class="btn btn-success"><i class="bi bi-check-circle-fill"></i></button>
+          <button id="pauseBtn" class="btn btn-warning ms-2"><i class="bi bi-pause-fill"></i></button>
+          <button id="resumeBtn" class="btn btn-info ms-2"><i class="bi bi-play-fill"></i></button>
+          <button id="stopBtn" class="btn btn-danger ms-2"><i class="bi bi-stop-fill"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       2. STEUER- UND KONFIGURATIONSELEMENTE
+       ==================================================== -->
+  <div id="myContainer" class="container my-3">
+    <h2 class="mb-0 d-inline-block">DWD-WMS</h2>
+    <h3 id="clock" class="d-inline-block ms-3 text-muted"></h3>
+    <h4 id="refreshTimer" class="d-inline-block ms-3 text-muted"></h4>
+    <!-- Layer-Dropdown und Karten-Größensteuerung -->
+    <div class="row mb-3 gap-1">
+      <div class="col-12 col-md-5 d-flex">
+        <label for="layerSelect" class="form-label w-25">Layer:</label>
+        <select id="layerSelect" class="form-select d-inline-block w-75">
+          <option value="">-- Lade Layer, bitte warten... --</option>
+        </select>
+      </div>
+      <div class="col-12 col-md-5 d-flex">
+        <label for="mapHeight" class="form-label w-25">Höhe (px):</label>
+        <input type="text" id="mapHeight" class="form-control d-inline-block" style="width:80px;" value="400" />
+        <button id="applySizeBtn" class="btn btn-primary ms-3">Größe anwenden</button>
+      </div>
+    </div>
+    
+    <!-- Datums-/Uhrzeitfelder -->
+    <div class="row mb-3 gap-1">
+      <div class="col-12 col-md-5 d-flex">
+        <label for="startTime" class="form-label w-25">Start-Zeit:</label>
+        <input type="datetime-local" id="startTime" class="form-control w-75" style="width:180px;" />
+      </div>
+      <div class="col-12 col-md-5 d-flex">
+        <label for="endTime" class="form-label w-25">End-Zeit:</label>
+        <input type="datetime-local" id="endTime" class="form-control w-75" style="width:180px;" />
+      </div>
+      <div class="col-12 col-md-2 d-flex align-items-end">
+        <!-- Platzhalter für eventuelle weitere Elemente -->
+      </div>
+    </div>
+    
+    <!-- Adress- und Zoomsteuerung -->
+    <div class="row mb-3 gap-1">
+      <div class="col-12 col-md-5 d-flex">
+        <label for="addressInput" class="form-label w-25">Adresse:</label>
+        <input type="text" id="addressInput" class="form-control w-75" placeholder="Adresse eingeben" />
+      </div>
+      <div class="col-12 col-md-5 d-flex">
+        <label for="zoomLevel" class="form-label w-25">Zoom-Stufe:</label>
+        <input type="text" id="zoomLevel" class="form-control d-inline-block" style="width:80px;" placeholder="Zoom (z.B. 7)" />
+        <button id="geocodeBtn" class="btn btn-secondary ms-3">Adresse suchen</button>
+      </div>
+    </div>
+
+    <!-- Checkboxen für zusätzliche Optionen -->
+    <div class="row ms-1">
+      <div class="col-12 col-md-3 form-check">
+        <input type="checkbox" id="darkCheck" class="form-check-input" />
+        <label for="darkCheck" class="form-check-label">Basiskarte abdunkeln</label>
+      </div>
+      <div class="col-12 col-md-4 form-check">
+        <input type="checkbox" id="overlayTransCheck" class="form-check-input" />
+        <label for="overlayTransCheck" class="form-check-label">DWD-Overlay halbtransparent</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       3. INFO-BEREICHE (LAYER-INFO)
+       ==================================================== -->
+  <div class="container my-3">
+    <div class="row mt-3">
+      <div class="col-12 col-md-8">
+          <!-- Bereich zur Anzeige von Layer-Informationen -->
+          <div id="infocontainer">
+              <div id="layerInfo">
+                  <strong>Information zum gewählten Layer:</strong><br>
+                    <ul>
+                      <li>Daten ab: --.--.---- --:-- (lokal)</li>
+                      <li>Zeitraum: --.--.---- --:-- – --.--.---- --:--</li>
+                      <li>Intervall: -------</li>
+                    </ul>
+              </div>
+              <div id="connectionInfo">Verbindungstest: Ping: ---- ms, Speed: ------ B/s</div>
+            </div>
+        </div>
+      <div class="col-12 col-md-4">
+          <button id="reloadCapabilitiesBtn" class="btn btn-secondary mb-2">Capabilities aktualisieren</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- ====================================================
+       4. EXTERNE SCRIPT-EINBINDUNG
+       ==================================================== -->
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <!-- Bootstrap JS (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- ====================================================
+       5. HAUPT-JAVASCRIPT (LOGIK & FUNKTIONEN)
+       ==================================================== -->
+  <script>
+    /* ---------------------------------------------------------
+       1) GLOBALE VARIABLEN & KONFIGURATION
+       --------------------------------------------------------- */
+    const CAPABILITIES_URL = "https://maps.dwd.de/geoserver/dwd/wms?service=WMS&request=GetCapabilities&version=1.1.1";
+    
+    const DEFAULT_LAYER = "Radar_rv_product_1x1km_ger";
+    const ANIMATION_INTERVAL = 200; // Animationsintervall in Millisekunden
+    const MAX_FRAMES = 300;         // Maximale Anzahl an Frames
+
+    // Leaflet-Objekte & weitere Variablen
+    let map, osmLayer;
+    let wmsBaseUrl = null;
+    let layerInfoList = [];
+    let frameLayers = [];
+    let animTimer = null;
+    let animIndex = 0;
+    let currentInterval = 5; // Standardintervall (wird bei onStartClicked() angepasst)
+
+    // Auto-Refresh Timer (z. B. alle 5 Minuten)
+    let autoRefreshTimer = null;
+
+    // Array mit Zeitstempeln (wird später gefüllt)
+    let latestTimes = null;
+
+    // DOM-Referenzen
+    let mapHeightEl, applySizeBtn;
+    let layerSelectEl, startTimeEl, endTimeEl, startBtn;
+    let stopBtn; // Stop-Button
+    let pauseBtn, resumeBtn; // Buttons für Pause & Resume
+    let timeSlider; // Zeit-Slider
+
+    let darkCheckEl, overlayTransCheckEl;
+    let loadingContainer, loadingInfo, progressBar;
+    let timeDisplayEl, layerInfoEl;
+    let legendOverlayEl;
+
+    // Benutzerdefinierte Einstellungen (JSON-Settings)
+    let userSettings = {
+      mapHeight: 446,
+      defaultLayer: DEFAULT_LAYER,
+      darkenBase: false,
+      overlayTransparent: false,
+      address: "",      // Gespeicherte Adresse
+      lat: null,        // Gespeicherte Breite
+      lon: null,        // Gespeicherte Länge
+      zoomLevel: 7      // Gespeicherte Zoomstufe
+    };
+    function updateClock() {
+      const clockEl = document.getElementById("clock");
+      if (!clockEl) return;
+      const now = new Date();
+      // Formatierung: z. B. "13.04.2025 14:25:30"
+      const day = String(now.getDate()).padStart(2, "0");
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      const year = now.getFullYear();
+      const hours = String(now.getHours()).padStart(2, "0");
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      const seconds = String(now.getSeconds()).padStart(2, "0");
+      
+      clockEl.textContent = `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
+    }
+    
+    // Starte den Timer, der die Uhr jede Sekunde aktualisiert
+    setInterval(updateClock, 1000);
+    // Direkt beim Laden initialisieren:
+    updateClock();
+
+    
+    
+    /* ---------------------------------------------------------
+       2) INITIALISIERUNG NACH "DOMContentLoaded"
+       --------------------------------------------------------- */
+    document.addEventListener("DOMContentLoaded", async () => {
+      // A) DOM-Referenzen abrufen
+      mapHeightEl         = document.getElementById("mapHeight");
+      applySizeBtn        = document.getElementById("applySizeBtn");
+
+      layerSelectEl       = document.getElementById("layerSelect");
+      startTimeEl         = document.getElementById("startTime");
+      endTimeEl           = document.getElementById("endTime");
+      startBtn            = document.getElementById("startBtn");
+      stopBtn             = document.getElementById("stopBtn");
+
+      // NEU: Referenzen für Pause/Resume und den Slider
+      pauseBtn            = document.getElementById("pauseBtn");
+      resumeBtn           = document.getElementById("resumeBtn");
+      timeSlider          = document.getElementById("timeSlider");
+
+      darkCheckEl         = document.getElementById("darkCheck");
+      overlayTransCheckEl = document.getElementById("overlayTransCheck");
+
+      loadingContainer    = document.getElementById("loadingContainer");
+      loadingInfo         = document.getElementById("loadingInfo");
+      progressBar         = document.getElementById("progressBar");
+      timeDisplayEl       = document.getElementById("timeDisplay");
+      layerInfoEl         = document.getElementById("layerInfo");
+      legendOverlayEl     = document.getElementById("legendOverlay");
+
+      // 1) Lade benutzereinstellungen aus localStorage
+      await loadSettingsFromClient();
+
+      // 2) Wende die Kartengröße gemäß den Einstellungen an
+      applySizeFromSettings();
+
+      // Initialisiere die Leaflet-Karte mit Startkoordinaten und Zoom
+      map = L.map("mapid").setView([51.3, 7.1], 7);
+      osmLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 14
+      }).addTo(map);
+
+      // Erstelle ein eigenes Pane für Overlay-Layer (höhere z-index-Werte)
+      map.createPane("myOverlayPane");
+      map.getPane("myOverlayPane").style.zIndex = 650;
+
+      // 3) Lade Capabilities (Layer-Informationen) vom Server
+      document.getElementById("loadingOverlay").style.display = "flex";
+      await loadAndParseCapabilities();
+      document.getElementById("loadingOverlay").style.display = "none";
+
+      // Fülle das Layer-Dropdown mit den erlaubten Layern
+      fillLayerDropdown();
+
+      // Setze gegebenenfalls den Standard-Layer
+      if (layerInfoList.some(l => l.name === userSettings.defaultLayer)) {
+        layerSelectEl.value = userSettings.defaultLayer;
+      }
+
+      onLayerSelected();
+
+      // Zentriere die Karte, falls bereits Koordinaten in den Einstellungen vorhanden sind
+      if (userSettings.lat && userSettings.lon) {
+        const zoom = userSettings.zoomLevel || 7;
+        map.setView([userSettings.lat, userSettings.lon], zoom);
+      }
+
+      // Setze Checkboxen gemäß gespeicherter Einstellungen
+      darkCheckEl.checked         = userSettings.darkenBase;
+      overlayTransCheckEl.checked = userSettings.overlayTransparent;
+      toggleDarkenBase(userSettings.darkenBase);
+      toggleOverlayTransparency(userSettings.overlayTransparent);
+
+      // 4) Registriere Event-Listener für diverse Elemente
+      applySizeBtn.addEventListener("click", onApplyMapSize);
+      layerSelectEl.addEventListener("change", onLayerSelected);
+      startBtn.addEventListener("click", onStartClicked);
+      stopBtn.addEventListener("click", onStopClicked);
+      pauseBtn.addEventListener("click", onPauseClicked);
+      resumeBtn.addEventListener("click", onResumeClicked);
+      timeSlider.addEventListener("input", onSliderChanged);
+
+      darkCheckEl.addEventListener("change", onDarkCheckChanged);
+      overlayTransCheckEl.addEventListener("change", onOverlayTransCheckChanged);
+
+      // Einstellungen speichern, wenn Eingaben geändert werden
+      mapHeightEl.addEventListener("change", saveSettings);
+      layerSelectEl.addEventListener("change", saveSettings);
+      darkCheckEl.addEventListener("change", saveSettings);
+      overlayTransCheckEl.addEventListener("change", saveSettings);
+
+        const reloadCapabilitiesBtn = document.getElementById("reloadCapabilitiesBtn");
+        reloadCapabilitiesBtn.addEventListener("click", async () => {
+          // Entferne den zwischengespeicherten Capabilities-Eintrag
+          sessionStorage.removeItem("capabilitiesXML");
+        
+          // Lade-Hinweis anzeigen
+        document.getElementById("loadingOverlay").style.display = "flex";
+          
+          try {
+            // Capabilities neu laden vom Server
+            await loadAndParseCapabilities();
+            document.getElementById("loadingOverlay").style.display = "none";
+            // Dropdown aktualisieren und Layer-Info neu setzen
+            fillLayerDropdown();
+            onLayerSelected();
+            alert("Capabilities wurden aktualisiert. Die Seite wird nun neu geladen.");
+            // Seite neu laden
+            location.reload();
+          } catch (err) {
+            hideLoading();
+            console.error("Fehler beim Aktualisieren der Capabilities:", err);
+            alert("Fehler beim Aktualisieren der Capabilities.");
+          }
+        });
+
+
+      // F2-Modus: Umschalten in den Vollbildmodus per F2-Taste
+      let f2ModeActive = false;
+      document.addEventListener("keydown", (ev) => {
+        if (ev.key === "F2") {
+          toggleF2Mode();
+        }
+      });
+      function toggleF2Mode() {
+        const containerEl = document.getElementById("myContainer");
+        const mapEl = document.getElementById("mapid");
+        const timeEl = document.getElementById("timeDisplay");
+
+        f2ModeActive = !f2ModeActive;
+        if (f2ModeActive) {
+          mapEl.classList.add("fullscreen");
+          timeEl.classList.add("fullscreen");
+          containerEl.style.display = "none";
+          map.invalidateSize();
+        } else {
+          containerEl.style.display = "";
+          mapEl.classList.remove("fullscreen");
+          timeEl.classList.remove("fullscreen");
+          map.invalidateSize();
+        }
+      }
+      
+      // Event-Listener für den Geocode-Button (Adresse in Koordinaten umwandeln)
+      const geocodeBtn = document.getElementById("geocodeBtn");
+      const addressInput = document.getElementById("addressInput");
+      const zoomLevelInput = document.getElementById("zoomLevel");
+      geocodeBtn.addEventListener("click", () => {
+        const address = addressInput.value;
+        const zoom = parseInt(zoomLevelInput.value, 10) || userSettings.zoomLevel;
+        if (address) {
+          geocodeAddress(address, zoom);
+        } else {
+          alert("Bitte geben Sie eine Adresse ein.");
+        }
+      });
+    });
+
+    /* ---------------------------------------------------------
+       3) SETTINGS LADEN UND SPEICHERN (localStorage)
+       --------------------------------------------------------- */
+    async function loadSettingsFromClient() {
+      // Versuche, Einstellungen aus localStorage zu laden
+      const settings = localStorage.getItem("userSettings");
+      if (settings) {
+        try {
+          const data = JSON.parse(settings);
+          if (data.mapHeight) userSettings.mapHeight = data.mapHeight;
+          if (data.defaultLayer) userSettings.defaultLayer = data.defaultLayer;
+          if (typeof data.darkenBase === "boolean") userSettings.darkenBase = data.darkenBase;
+          if (typeof data.overlayTransparent === "boolean") userSettings.overlayTransparent = data.overlayTransparent;
+          if (data.address) userSettings.address = data.address;
+          if (data.lat) userSettings.lat = data.lat;
+          if (data.lon) userSettings.lon = data.lon;
+          if (data.zoomLevel) userSettings.zoomLevel = data.zoomLevel;
+        } catch (e) {
+          console.warn("Fehler beim Parsen der gespeicherten Einstellungen:", e);
+        }
+      }
+      mapHeightEl.value = userSettings.mapHeight;
+      const addressInput = document.getElementById("addressInput");
+      if (addressInput) addressInput.value = userSettings.address || "";
+      const zoomLevelInput = document.getElementById("zoomLevel");
+      if (zoomLevelInput) zoomLevelInput.value = userSettings.zoomLevel || 7;
+    }
+
+    function saveSettings() {
+      userSettings.mapHeight = parseInt(mapHeightEl.value, 10) || 400;
+      userSettings.defaultLayer = layerSelectEl.value || DEFAULT_LAYER;
+      userSettings.darkenBase = darkCheckEl.checked;
+      userSettings.overlayTransparent = overlayTransCheckEl.checked;
+      
+      const addressInput = document.getElementById("addressInput");
+      if (addressInput) {
+        userSettings.address = addressInput.value;
+      }
+      const zoomLevelInput = document.getElementById("zoomLevel");
+      if (zoomLevelInput) {
+        userSettings.zoomLevel = parseInt(zoomLevelInput.value, 10) || 7;
+      }
+      // Speichere die Einstellungen im localStorage
+      localStorage.setItem("userSettings", JSON.stringify(userSettings));
+      console.log("Einstellungen lokal gespeichert:", userSettings);
+    }
+
+    /* ---------------------------------------------------------
+       4) KARTENGRÖSSE ANWENDEN
+       --------------------------------------------------------- */
+    function applySizeFromSettings() {
+      const mapEl = document.getElementById("mapid");
+      mapEl.style.width  = "100%";
+      mapEl.style.height = userSettings.mapHeight + "px";
+      if (map) {
+        map.invalidateSize();
+      }
+    }
+    function onApplyMapSize() {
+      userSettings.mapHeight = parseInt(mapHeightEl.value, 10) || 400;
+      applySizeFromSettings();
+      saveSettings();
+    }
+
+    /* ---------------------------------------------------------
+       5) CAPABILITIES LADEN UND PARSEN
+       --------------------------------------------------------- */
+    async function loadAndParseCapabilities() {
+    let xmlText;
+    const cacheKey = "capabilitiesXML";
+    const now = Date.now();
+    
+    // Prüfe, ob ein Cache-Eintrag vorhanden ist und ob er nicht älter als 5 Minuten ist
+    const cacheData = sessionStorage.getItem(cacheKey);
+    if (cacheData) {
+    try {
+      const cached = JSON.parse(cacheData);
+      if (now - cached.timestamp < 5 * 60 * 1000) { // 5 Minuten = 5*60*1000 ms
+        xmlText = cached.xmlText;
+      } else {
+        sessionStorage.removeItem(cacheKey);
+      }
+    } catch (e) {
+      console.warn("Fehler beim Parsen des Caches, lade Capabilities neu:", e);
+      sessionStorage.removeItem(cacheKey);
+    }
+    }
+    
+    // Wenn kein Cache vorhanden oder abgelaufen, lade die Capabilities neu
+    if (!xmlText) {
+    const resp = await fetch(CAPABILITIES_URL, { cache: "no-store" });
+    if (!resp.ok) {
+      throw new Error("HTTP-Error: " + resp.status);
+    }
+    xmlText = await resp.text();
+    // Speichere den neuen Eintrag im Cache inklusive Zeitstempel
+    sessionStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, xmlText: xmlText }));
+    }
+    
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(xmlText, "application/xml");
+    wmsBaseUrl = parseGetMapOnlineResource(xmlDoc);
+    layerInfoList = parseLayersWithTime(xmlDoc);
+    }
+
+
+
+    function parseGetMapOnlineResource(xmlDoc) {
+      const getMapNodes = xmlDoc.getElementsByTagName("GetMap");
+      if (!getMapNodes || getMapNodes.length === 0) return null;
+      const dcp = getMapNodes[0].getElementsByTagName("DCPType");
+      if (!dcp || dcp.length === 0) return null;
+      const httpGets = dcp[0].getElementsByTagName("Get");
+      if (!httpGets || httpGets.length === 0) return null;
+      const onlineRes = httpGets[0].getElementsByTagName("OnlineResource")[0];
+      if (!onlineRes) return null;
+      return onlineRes.getAttribute("xlink:href");
+    }
+
+    function parseLayersWithTime(xmlDoc) {
+      let result = [];
+      const layerNodes = xmlDoc.getElementsByTagName("Layer");
+      for (let i = 0; i < layerNodes.length; i++) {
+        const ln = layerNodes[i];
+        const nameEl = ln.getElementsByTagName("Name")[0];
+        if (!nameEl) continue;
+        const layerName = nameEl.textContent.trim();
+        const titleEl = ln.getElementsByTagName("Title")[0];
+        const layerTitle = titleEl ? titleEl.textContent.trim() : layerName;
+
+        // Zeitliche Extent-Ermittlung
+        let timeExtent = null;
+        const extentEls = ln.getElementsByTagName("Extent");
+        for (let e = 0; e < extentEls.length; e++) {
+          if ((extentEls[e].getAttribute("name")||"").toLowerCase() === "time") {
+            timeExtent = extentEls[e].textContent.trim();
+            break;
+          }
+        }
+        if (!timeExtent) continue;
+
+        // Legenden-URL extrahieren, falls vorhanden
+        let legendUrl = null;
+        const styleEls = ln.getElementsByTagName("Style");
+        if (styleEls.length > 0) {
+          const styleNode = styleEls[0];
+          const legendEls = styleNode.getElementsByTagName("LegendURL");
+          if (legendEls.length > 0) {
+            const onlineRes = legendEls[0].getElementsByTagName("OnlineResource")[0];
+            if (onlineRes) {
+              legendUrl = onlineRes.getAttribute("xlink:href");
+            }
+          }
+        }
+
+        result.push({
+          name: layerName,
+          title: layerTitle,
+          extentString: timeExtent,
+          legendUrl: legendUrl
+        });
+      }
+      return result;
+    }
+
+    function fillLayerDropdown() {
+      // Nur erlaubte Layer erscheinen im Dropdown
+      const allowedLayers = [
+        "GefuehlteTemp",
+        "GefuehlteTempMax",
+        "GefuehlteTempMaxZeit",
+        "GefuehlteTempMin",
+        "GefuehlteTempMinZeit",
+        "RADOLAN-RW",
+        "RADOLAN-RY",
+        "Radar_rv_product_1x1km_ger",
+        "Radar_wn-analysis_1x1km_ger",
+        "Radar_wn-product_1x1km_ger",
+        "Satellite_meteosat_1km_euat_rgb_day_hrv_and_night_ir108_3h",
+        "Satellite_worldmosaic_3km_world_ir108_3h",
+        "Warnungen"
+      ];
+    
+      // Setze das Dropdown zurück und füge einen Platzhalter ein
+      layerSelectEl.innerHTML = "";
+      const opt0 = document.createElement("option");
+      opt0.value = "";
+      opt0.textContent = "-- Zeitfähigen Layer wählen --";
+      layerSelectEl.appendChild(opt0);
+    
+      // Filtere und füge die erlaubten Layer hinzu
+      layerInfoList
+        .filter(obj => allowedLayers.includes(obj.name))
+        .forEach(obj => {
+          const opt = document.createElement("option");
+          opt.value = obj.name;
+          opt.textContent = `${obj.title} (${obj.name})`;
+          layerSelectEl.appendChild(opt);
+        });
+    }
+
+    /* ---------------------------------------------------------
+       6) STANDARD-ZEIT UND LAYER-INFO ANZEIGEN
+       --------------------------------------------------------- */
+    function onLayerSelected() {
+      setDefaultTimes();
+      showLayerInfo();
+    }
+
+    function setDefaultTimes() {
+      if (!layerSelectEl.value) return;
+      const lyrobj = layerInfoList.find(l => l.name === layerSelectEl.value);
+      if (!lyrobj) return;
+
+      const parts = lyrobj.extentString.split("/");
+      if (parts.length !== 3) return;
+
+      const extStartIso = parts[0];
+      const extEndIso   = parts[1];
+
+      // Berechne den Startzeitpunkt: "jetzt -1 Stunde"
+      const now = new Date();
+      now.setHours(now.getHours() - 1);
+
+      const extStartDate = new Date(extStartIso);
+      const extEndDate   = new Date(extEndIso);
+
+      let endDate   = (extEndDate > new Date()) ? extEndDate : new Date();
+      let startDate = (now < extStartDate) ? extStartDate : now;
+
+      startTimeEl.value = dateToLocalInput(startDate);
+      endTimeEl.value   = dateToLocalInput(endDate);
+    }
+
+    function showLayerInfo() {
+      if (!layerSelectEl.value) {
+        layerInfoEl.style.display = "none";
+        layerInfoEl.innerHTML = "";
+        legendOverlayEl.style.display = "none";
+        legendOverlayEl.innerHTML = "";
+        return;
+      }
+      const lyrobj = layerInfoList.find(l => l.name === layerSelectEl.value);
+      if (!lyrobj) {
+        layerInfoEl.style.display = "none";
+        layerInfoEl.innerHTML = "";
+        legendOverlayEl.style.display = "none";
+        legendOverlayEl.innerHTML = "";
+        return;
+      }
+
+      const parts = lyrobj.extentString.split("/");
+      if (parts.length !== 3) {
+        layerInfoEl.style.display = "none";
+        layerInfoEl.innerHTML = "";
+        legendOverlayEl.style.display = "none";
+        legendOverlayEl.innerHTML = "";
+        return;
+      }
+      const extStartIso = parts[0];
+      const extEndIso   = parts[1];
+      const periodStr   = parts[2];
+
+      const stepMin      = parseIso8601PeriodToMinutes(periodStr);
+      const intervalTxt  = formatIntervalString(stepMin);
+      const startLocalStr= isoToLocalString(extStartIso);
+      const endLocalStr  = isoToLocalString(extEndIso);
+
+      let legendHtmlOverlay = "";
+      if (lyrobj.legendUrl) {
+        legendHtmlOverlay = `<img src="${lyrobj.legendUrl}" alt="Legende" />`;
+      }
+
+      layerInfoEl.style.display = "block";
+      layerInfoEl.innerHTML = `
+        <strong>Information zum gewählten Layer:</strong><br/>
+        <ul>
+          <li>Daten ab: ${startLocalStr} (lokal)</li>
+          <li>Zeitraum: ${startLocalStr} – ${endLocalStr}</li>
+          <li>Intervall: ${intervalTxt}</li>
+        </ul>
+      `;
+      if (legendHtmlOverlay) {
+        legendOverlayEl.style.display = "block";
+        legendOverlayEl.innerHTML = legendHtmlOverlay;
+      } else {
+        legendOverlayEl.style.display = "none";
+        legendOverlayEl.innerHTML = "";
+      }
+    }
+
+    function isoToLocalString(isoStr) {
+      const d = new Date(isoStr);
+      const dd = String(d.getDate()).padStart(2,"0");
+      const mm = String(d.getMonth()+1).padStart(2,"0");
+      const yy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2,"0");
+      const mn = String(d.getMinutes()).padStart(2,"0");
+      return `${dd}.${mm}.${yy} ${hh}:${mn}`;
+    }
+
+    function formatIntervalString(stepMin) {
+      if (stepMin === 1440) {
+        return "Einmal pro Tag";
+      } else if (stepMin === 60) {
+        return "Alle 1 Stunde";
+      } else if (stepMin > 60 && (stepMin % 60) === 0) {
+        return `Alle ${stepMin/60} Stunden`;
+      } else if (stepMin < 60) {
+        return `Alle ${stepMin} Minuten`;
+      } else {
+        if ((stepMin % 1440) === 0) {
+          return `Alle ${stepMin/1440} Tage`;
+        } else {
+          return `Alle ${stepMin} Minuten`;
+        }
+      }
+    }
+
+    /* ---------------------------------------------------------
+       7) START-BUTTON – ANIMATION & FRAME-CACHING
+       --------------------------------------------------------- */
+    async function onStartClicked() {
+      // Stoppe ggf. laufende Animation und Auto-Refresh
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+      stopAutoRefresh();
+
+      const selLayer = layerSelectEl.value;
+      if (!selLayer) {
+        alert("Bitte einen Layer auswählen!");
+        return;
+      }
+      const lyrobj = layerInfoList.find(l => l.name === selLayer);
+      if (!lyrobj) {
+        alert("Unbekannter Layer?");
+        return;
+      }
+
+      const parts = lyrobj.extentString.split("/");
+      if (parts.length !== 3) {
+        alert("Extent-Format unbekannt!");
+        return;
+      }
+      const extStartIso = parts[0];
+      const extEndIso   = parts[1];
+      const periodStr   = parts[2];
+
+      const stepMin = parseIso8601PeriodToMinutes(periodStr);
+      currentInterval = stepMin;  // Speichere das aktuelle Intervall
+      
+      // Validierung der Start-/Endzeit (Eingabe durch den Benutzer)
+      const sVal = startTimeEl.value;
+      const eVal = endTimeEl.value;
+      if (!sVal || !eVal) {
+        alert("Bitte Start-/Endzeit wählen!");
+        return;
+      }
+      const userStartIso = localInputToIso(sVal, stepMin);
+      const userEndIso   = localInputToIso(eVal, stepMin);
+      
+      // Bestimme die Zeitspanne als Schnittmenge
+      let finalStartIso = (userStartIso > extStartIso) ? userStartIso : extStartIso;
+      let finalEndIso   = userEndIso;
+      if (finalStartIso >= finalEndIso) {
+        alert("Kein gültiger Zeitbereich nach Schnittmenge!");
+        return;
+      }
+
+      // Baue das Array mit Zeitstempeln anhand des Extents und des Intervalls
+      latestTimes = buildTimeArrayFromExtent(finalStartIso, finalEndIso, stepMin);
+      if (latestTimes.length < 1) {
+        alert("Keine Zeitpunkte in diesem Bereich!");
+        return;
+      }
+      console.log("TimeSteps:", latestTimes);
+
+      const serviceUrl = wmsBaseUrl || "https://maps.dwd.de/geoserver/dwd/wms";
+      const tileUrl    = serviceUrl;
+
+      // Setze alle vorherigen Frame-Layer zurück
+      frameLayers.forEach(fl => fl.removeFrom(map));
+      frameLayers = [];
+      timeDisplayEl.style.display = "none";
+      timeDisplayEl.innerHTML = "";
+
+      showLoading(`Lade ${latestTimes.length} Frames...`, 0);
+      let loadedCount = 0;
+
+      // Initialisiere den Zeit-Slider mit den neuen Zeiten
+      initTimeSlider(latestTimes);
+
+      // Erzeuge einen einzigartigen Wert als Cache-Buster (gleicher Wert für alle Frames in diesem Durchlauf)
+        const unique = Date.now();
+        
+        latestTimes.forEach((isoT, idx) => {
+          const frameLayer = L.tileLayer.wms(tileUrl, {
+            layers: selLayer,
+            format: "image/png",
+            transparent: true,
+            version: "1.1.1",
+            attribution: "Radar data © DWD",
+            pane: "myOverlayPane"
+          });
+          // Hänge zusätzlich den "nocache"-Parameter an, um den Browser-Cache zu umgehen
+          frameLayer.setParams({ time: isoT, nocache: unique }, true);
+          frameLayer.setOpacity(0);
+        
+          frameLayer.once("load", () => {
+            loadedCount++;
+            const perc = Math.round((loadedCount / latestTimes.length) * 100);
+            showLoading(`Frames geladen: ${loadedCount}/${latestTimes.length}`, perc);
+        
+            if (loadedCount === latestTimes.length) {
+              setTimeout(() => {
+                hideLoading();
+                startAnimation(latestTimes);
+                // Starte den Auto-Refresh-Zyklus
+                startAutoRefresh();
+              }, 500);
+            }
+          });
+        
+          frameLayer.addTo(map);
+          frameLayers.push(frameLayer);
+        });
+    }
+
+    // Initialisierung des Zeit-Sliders
+    function initTimeSlider(times) {
+      timeSlider.min = 0;
+      timeSlider.max = times.length - 1;
+      timeSlider.value = 0;
+      timeSlider.style.setProperty('--range-progress', '0%');
+    }
+
+    /* 
+     * startAnimation: Animiert die Frames ab einem gegebenen Index
+     * (Optionaler Parameter "fromIndex" legt den Startwert fest.)
+     */
+    function startAnimation(times, fromIndex = 0) {
+      if (frameLayers.length === 0) return;
+      if (times.length === 0) return;
+
+      animIndex = fromIndex;
+
+      // Falls nur ein Frame verfügbar ist, einfach anzeigen
+      if (frameLayers.length === 1) {
+        frameLayers[0].setOpacity(1);
+        updateTimeDisplay(times[0]);
+        return;
+      }
+
+      // Setze alle Frames unsichtbar, nur der aktuelle Index soll sichtbar sein
+      frameLayers.forEach((lyr, i) => {
+        lyr.setOpacity(i === animIndex ? 1 : 0);
+      });
+      updateTimeDisplay(times[animIndex]);
+      timeDisplayEl.style.display = "block";
+
+      // Starte die Animation als periodisches Intervall
+      animTimer = setInterval(() => {
+        frameLayers[animIndex].setOpacity(0);
+        animIndex = (animIndex + 1) % frameLayers.length;
+        frameLayers[animIndex].setOpacity(1);
+        updateTimeDisplay(times[animIndex]);
+        // Aktualisiere den Slider-Fortschritt
+        timeSlider.style.setProperty('--range-progress', (animIndex / timeSlider.max * 100) + '%');
+        timeSlider.value = animIndex;
+      }, ANIMATION_INTERVAL);
+    }
+
+    /* ---------------------------------------------------------
+       8) ZEIT-ANZEIGE AKTUALISIEREN (lokal)
+       --------------------------------------------------------- */
+    function updateTimeDisplay(isoStr) {
+      const d = new Date(isoStr);
+      const dd = String(d.getDate()).padStart(2, "0");
+      const mm = String(d.getMonth() + 1).padStart(2, "0");
+      const yy = d.getFullYear();
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mn = String(d.getMinutes()).padStart(2, "0");
+      timeDisplay.innerHTML = `${dd}.${mm}.${yy} / ${hh}:${mn} lok.`;
+    
+      // Blende das Forecast-Overlay ein, wenn der Zeitpunkt in der Zukunft liegt
+      const now = new Date();
+      const forecastEl = document.getElementById("forecastOverlay");
+      if (d > now) {
+        forecastEl.style.display = "block";
+        forecastEl.innerHTML = "Prognose";
+      } else {
+        forecastEl.style.display = "none";
+      }
+    }
+
+    /* ---------------------------------------------------------
+       9) INTERVALL & ZEITSTEMPEL-BERECHNUNG
+       --------------------------------------------------------- */
+    function parseIso8601PeriodToMinutes(periodStr) {
+      const match = periodStr.match(/^P?T?(\d+)([HMSD])$/i);
+      if (!match) {
+        console.warn("Unerwartetes Period-Format:", periodStr, "– fallback 5 min");
+        return 5;
+      }
+      const amount = parseInt(match[1], 10);
+      const unit   = match[2].toUpperCase();
+
+      if (unit === "H") return amount * 60;
+      if (unit === "M") return amount;
+      if (unit === "S") return amount / 60;
+      if (unit === "D") return amount * 24 * 60;
+      return 5; 
+    }
+
+    function buildTimeArrayFromExtent(startIso, endIso, stepMin) {
+      const startDate = new Date(startIso);
+      const endDate   = new Date(endIso);
+      if (startDate >= endDate) return [];
+
+      startDate.setSeconds(0,0);
+      endDate.setSeconds(0,0);
+
+      let result = [];
+      for (let cur = new Date(startDate); cur <= endDate; cur.setMinutes(cur.getMinutes() + stepMin)) {
+        result.push(cur.toISOString().split(".")[0] + "Z");
+        if (result.length >= MAX_FRAMES) {
+          console.warn(`Max Frames (${MAX_FRAMES}) erreicht – stoppe.`);
+          break;
+        }
+      }
+      return result;
+    }
+
+    /* ---------------------------------------------------------
+       10) PAUSE, RESUME & SLIDER INTERAKTION
+       --------------------------------------------------------- */
+    function onSliderChanged(ev) {
+      // Stoppe die Animation, wenn der Slider bewegt wird
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+      const idx = parseInt(ev.target.value, 10);
+      let progressPercent = (idx / ev.target.max * 100) + '%';
+      ev.target.style.setProperty('--range-progress', progressPercent);
+      
+      setCurrentFrame(idx);
+    }
+
+    function setCurrentFrame(idx) {
+      if (!frameLayers.length) return;
+      if (!latestTimes || !latestTimes.length) return;
+      frameLayers.forEach(fl => fl.setOpacity(0));
+      frameLayers[idx].setOpacity(1);
+      updateTimeDisplay(latestTimes[idx]);
+      timeSlider.value = idx;
+      animIndex = idx;
+    }
+
+    function onPauseClicked() {
+      // Stoppe die laufende Animation
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+    }
+
+    function onResumeClicked() {
+      // Setze die Animation ab dem aktuellen Index fort, wenn sie nicht läuft
+      if (!animTimer && latestTimes && latestTimes.length > 0) {
+        startAnimation(latestTimes, animIndex);
+      }
+    }
+
+    /* ---------------------------------------------------------
+       11) LADE-BALKEN ANZEIGE
+       --------------------------------------------------------- */
+    function showLoading(info, percent) {
+      loadingContainer.style.display = "block";
+      loadingInfo.textContent = info;
+      progressBar.value = percent;
+    }
+    function hideLoading() {
+      loadingContainer.style.display = "none";
+      progressBar.value = 0;
+      loadingInfo.textContent = "";
+    }
+
+    /* ---------------------------------------------------------
+       12) BASISKARTE ABDUNKELN & OVERLAY-TRANSPARENZ
+       --------------------------------------------------------- */
+    function onDarkCheckChanged() {
+      userSettings.darkenBase = darkCheckEl.checked;
+      toggleDarkenBase(userSettings.darkenBase);
+      saveSettings();
+    }
+    function toggleDarkenBase(doDark) {
+      const tilePane = document.querySelector(".leaflet-tile-pane");
+      if (!tilePane) return;
+      tilePane.style.filter = doDark ? "brightness(40%)" : "none";
+    }
+
+    function onOverlayTransCheckChanged() {
+      userSettings.overlayTransparent = overlayTransCheckEl.checked;
+      toggleOverlayTransparency(userSettings.overlayTransparent);
+      saveSettings();
+    }
+    function toggleOverlayTransparency(doTrans) {
+      const overlayPane = map.getPane("myOverlayPane");
+      if (!overlayPane) return;
+      overlayPane.style.opacity = doTrans ? "0.5" : "1";
+    }
+
+    /* ---------------------------------------------------------
+       13) AUTO-REFRESH UND STOP-FUNKTION
+       --------------------------------------------------------- */
+    function stopAutoRefresh() {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+    }
+    // Global: Zeitpunkt des nächsten Auto-Refreshs
+    let autoRefreshNextTime = null;
+    
+    // Aktualisiert den Refresh-Timer im h3-Element
+    function updateRefreshTimer() {
+      const refreshTimerEl = document.getElementById("refreshTimer");
+      if (!refreshTimerEl) return;
+      if (autoRefreshNextTime === null) {
+        refreshTimerEl.textContent = "";
+        return;
+      }
+      const remainingMs = autoRefreshNextTime - Date.now();
+      if (remainingMs <= 0) {
+        refreshTimerEl.textContent = "Refresh läuft...";
+      } else {
+        const seconds = Math.ceil(remainingMs / 1000);
+        const minutes = Math.ceil(seconds / 60);
+        refreshTimerEl.textContent = `Update in: ${seconds} s (${minutes} min)`;
+      }
+    }
+    setInterval(updateRefreshTimer, 1000);
+    
+    // Ersetze die bisherige startAutoRefresh()-Funktion durch folgende Version:
+    function startAutoRefresh() {
+      stopAutoRefresh();
+      // Setze den Zeitpunkt des nächsten Refreshs (in Millisekunden)
+      autoRefreshNextTime = Date.now() + currentInterval * 60 * 1000;
+      autoRefreshTimer = setInterval(() => {
+        console.log("Auto-Refresh: +" + currentInterval + " min, neu laden...");
+        shiftTimesByInterval(currentInterval);
+        onStartClicked();
+        // Nach dem Reload: aktualisiere den nächsten Refresh-Zeitpunkt
+        autoRefreshNextTime = Date.now() + currentInterval * 60 * 1000;
+      }, currentInterval * 60 * 1000);
+    }
+
+    function shiftTimesByInterval(interval) {
+      // Verschiebe die Start- und Endzeit um den angegebenen Intervall (in Minuten)
+      let sVal = startTimeEl.value;
+      let sDate = new Date(sVal);
+      sDate.setMinutes(sDate.getMinutes() + interval);
+      startTimeEl.value = dateToLocalInput(sDate);
+      
+      let eVal = endTimeEl.value;
+      let eDate = new Date(eVal);
+      eDate.setMinutes(eDate.getMinutes() + interval);
+      endTimeEl.value = dateToLocalInput(eDate);
+    }
+
+    function onStopClicked() {
+      // Stoppe Auto-Refresh und Animation
+      stopAutoRefresh();
+      if (animTimer) {
+        clearInterval(animTimer);
+        animTimer = null;
+      }
+    }
+
+    /* ---------------------------------------------------------
+       14) HELPER-FUNKTIONEN FÜR DATUM UND ZEIT
+       --------------------------------------------------------- */
+    function dateToLocalInput(d) {
+      const yy = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const dd = String(d.getDate()).padStart(2, "0");
+      const hh = String(d.getHours()).padStart(2, "0");
+      const mn = String(d.getMinutes()).padStart(2, "0");
+      return `${yy}-${mo}-${dd}T${hh}:${mn}`;
+    }
+    function localInputToIso(localStr, interval = 5) {
+      const d = new Date(localStr);
+      roundTimeFloor(d, interval);
+      return d.toISOString().split(".")[0] + "Z";
+    }
+    function roundTimeFloor(d, interval) {
+      d.setSeconds(0, 0);
+      const m = d.getMinutes();
+      d.setMinutes(Math.floor(m / interval) * interval);
+    }
+
+    /* ---------------------------------------------------------
+       15) GEOCODING (ADRESS-TO-KOORDINATEN)
+       --------------------------------------------------------- */
+    /**
+     * Geocode eine Adresse mittels Nominatim (OpenStreetMap).
+     * Bei Erfolg: Speichert die Koordinaten in den Einstellungen und zentriert die Karte.
+     *
+     * @param {string} address - Die einzugebende Adresse (z.B. "Berlin, Alexanderplatz")
+     * @param {number} [zoom=7] - Optionale Zoomstufe; falls nicht angegeben, wird userSettings.zoomLevel genutzt.
+     */
+    function geocodeAddress(address, zoom = null) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+      fetch(url)
+        .then(response => response.json())
+        .then(data => {
+          if (data && data.length > 0) {
+            const lat = parseFloat(data[0].lat);
+            const lon = parseFloat(data[0].lon);
+            // Speichere die neuen Koordinaten in userSettings
+            userSettings.lat = lat;
+            userSettings.lon = lon;
+            if (zoom === null) {
+              zoom = userSettings.zoomLevel;
+            }
+            // Zentriere die Karte auf die ermittelten Koordinaten
+            map.setView([lat, lon], zoom);
+            saveSettings();
+          } else {
+            alert('Keine Ergebnisse gefunden.');
+          }
+        })
+        .catch(error => {
+          console.error('Fehler beim Geocoding:', error);
+          alert('Fehler beim Geocoding.');
+        });
+    }
+// --- Connection Test: Ping- und Speed-Messung (alle 20 Sekunden, maximal 2 Sekunden Dauer pro Test) ---
+
+function testServerConnection() {
+  const testUrl = "https://maps.dwd.de/geoserver/dwd/wms?service=WMS&request=GetCapabilities&version=1.1.1";
+  const controller = new AbortController();
+  const signal = controller.signal;
+  const startTime = performance.now();
+
+  // Abbruch des Requests nach 2 Sekunden
+  const timeout = setTimeout(() => controller.abort(), 60000);
+
+  fetch(testUrl, { signal })
+    .then(response => {
+      clearTimeout(timeout);
+      return response.text().then(text => {
+        const endTime = performance.now();
+        const duration = endTime - startTime; // in Millisekunden
+        const bytes = new TextEncoder().encode(text).length; // approximate Größe in Bytes
+        const speed = (bytes / duration) * 1000; // Geschwindigkeit in Byte/s
+        updateConnectionInfo(duration, speed);
+      });
+    })
+    .catch(err => {
+      clearTimeout(timeout);
+      const endTime = performance.now();
+      const duration = endTime - startTime;
+      updateConnectionInfo(duration, 0, true);
+    });
+}
+
+// Neue globale Variablen zur Speicherung des vorherigen Messwerts
+let prevPing = null;
+let prevSpeed = null;
+
+function updateConnectionInfo(pingMs, speed, error = false) {
+  const connectionInfoEl = document.getElementById("connectionInfo");
+  let bgColor = "";
+  // Vergleiche nur, wenn ein vorheriger Wert vorhanden ist und kein Fehler aufgetreten ist
+  if (prevPing !== null && prevSpeed !== null && !error) {
+    if (pingMs < prevPing && speed > prevSpeed) {
+      bgColor = "lightgreen";   // Besser: geringerer Ping, höhere Geschwindigkeit
+    } else if (pingMs > prevPing && speed < prevSpeed) {
+      bgColor = "lightcoral";   // Schlechter: höherer Ping, niedrigere Geschwindigkeit
+    } else {
+      bgColor = "";  // Standard: kein farblicher Hinweis
+    }
+  }
+  connectionInfoEl.style.backgroundColor = bgColor;
+  if (error) {
+    connectionInfoEl.innerHTML = `<strong>Connection Test:</strong> Fehler, Ping: ${Math.round(pingMs)} ms, Speed: -`;
+  } else {
+    connectionInfoEl.innerHTML = `<strong>Connection Test:</strong> Ping: ${Math.round(pingMs)} ms, Speed: ${Math.round(speed)} B/s`;
+  }
+  // Speichere den aktuellen Wert für den nächsten Vergleich
+  prevPing = pingMs;
+  prevSpeed = speed;
+}
+
+// Starte den Connection-Test alle 20 Sekunden
+setInterval(testServerConnection, 22000);
+
+// Event Listener für den "Download noProxy index.html"-Button
+document.addEventListener("DOMContentLoaded", () => {
+  const downloadNoProxyBtn = document.getElementById("downloadNoProxyBtn");
+  if (downloadNoProxyBtn) {
+    downloadNoProxyBtn.addEventListener("click", () => {
+      window.location.href = "index_noProxy.html";
+    });
+  }
+});
+
+
+  </script>
+  <footer class="bg-dark text-white py-3 mt-4">
+  <div class="container text-center">
+    <p class="mb-1">© Leaflet – Die Leaflet-Bibliothek ist urheberrechtlich geschützt.</p>
+    <p class="mb-1">© Deutscher Wetterdienst (DWD) – Die Radarbilder sind urheberrechtlich geschützt.</p>
+    <p class="mb-0">© Denys Safra – Programmcode und Logikroutinen.</p>
+  </div>
+</footer>
+</body>
+</html>
